@@ -253,9 +253,11 @@ lang UtestTypeAnnot = TypeAnnot + UtestAst + MExprEq
     let test = typeAnnotExpr env t.test in
     let expected = typeAnnotExpr env t.expected in
     let next = typeAnnotExpr env t.next in
-    TmUtest {{{{t with test = test}
+    let tusing = optionMap (typeAnnotExpr env) t.tusing in
+    TmUtest {{{{{t with test = test}
                   with expected = expected}
                   with next = next}
+                  with tusing = tusing}
                   with ty = ty next}
 end
 
@@ -591,7 +593,6 @@ let expectedRecordType = tyrecord_ [
 utest ty record with expectedRecordType using eqTypeEmptyEnv in
 let recordUpdate = typeAnnot (recordupdate_ record "x" (int_ 1)) in
 utest ty recordUpdate with expectedRecordType using eqTypeEmptyEnv in
-
 let typeDecl = bind_ (ntype_ n tyunknown_) unit_ in
 utest ty (typeAnnot typeDecl) with tyunit_ using eqTypeEmptyEnv in
 

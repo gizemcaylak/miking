@@ -217,10 +217,11 @@ let default_info =
 in
 
 let utest_info_ =
-  lam t. lam e. lam n.
+  lam t. lam e. lam n. lam u.
   TmUtest { test = t
           , expected = e
           , next = n
+          , tusing = u
           , ty = TyUnknown {}
           , info = default_info}
 in
