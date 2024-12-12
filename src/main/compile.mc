@@ -34,7 +34,7 @@ lang MCoreCompile =
   MExprHoles +
   MExprCmp +
   MExprSym + MExprRemoveTypeAscription + MExprTypeCheck +
-  MExprUtestGenerate + MExprRuntimeCheck + MExprProfileInstrument +
+  MExprUtestGenerate + MExprRuntimeCheck + MExprProfileInstrument + MExprTypeAnnot +
   MExprPrettyPrint +
   MExprLowerNestedPatterns +
   MExprConstantFold +
@@ -123,9 +123,13 @@ let compileWithUtests = lam options : Options. lam sourcePath. lam ast.
         , generalOptimizations = not options.disableJsGeneralOptimizations
         , tailCallOptimizations = not options.disableJsTCO
         } ast sourcePath
-      else compileMCore ast
-        { debugTypeAnnot = lam ast. if options.debugTypeAnnot then printLn (expr2str ast) else ()
-        , debugGenerate = lam ocamlProg. if options.debugGenerate then printLn ocamlProg else ()
+      else
+        let ast = typeAnnot ast in
+        endPhaseStats log "type-annot" ast;
+        -- If option --debug-type-annot, then pretty-print the AST
+        (if options.debugTypeAnnot then printLn (expr2str ast) else ());
+        compileMCore ast
+        { debugGenerate = lam ocamlProg. if options.debugGenerate then printLn ocamlProg else ()
         , exitBefore = lam. if options.exitBefore then exit 0 else ()
         , postprocessOcamlTops = lam tops. if options.runtimeChecks then wrapInTryWith tops else tops
         , compileOcaml = ocamlCompile options sourcePath
