@@ -4,12 +4,20 @@ include "bool.mc"
 -- Gamma
 external externalGammaLogPdf : Float -> Float -> Float -> Float
 external externalGammaSample ! : Float -> Float -> Float
+external externalGammaCdf : Float -> Float -> Float -> Float
+external externalGammaPpf : Float -> Float -> Float -> Float
 let gammaPdf = lam shape:Float. lam scale:Float. lam x:Float.
   exp (externalGammaLogPdf x shape scale)
 let gammaLogPdf = lam shape:Float. lam scale:Float. lam x:Float.
   externalGammaLogPdf x shape scale
 let gammaSample = lam shape:Float. lam scale:Float.
   externalGammaSample shape scale
+let gammaCdf = lam shape:Float. lam scale:Float. lam x:Float.
+  externalGammaCdf x shape scale
+let gammaPpf = lam shape:Float. lam scale:Float. lam q:Float.
+  externalGammaPpf q shape scale
+let discreteGammaLogPmf = lam shape:Float. lam scale:Float. lam n:Int. lam x:Float. log (divf 1. (int2float n))
+
 
 -- Binomial and Bernoulli
 external externalBinomialLogPmf : Int -> Float -> Int -> Float
@@ -106,6 +114,15 @@ let uniformDiscretePdf : Int -> Int -> Int -> Float = lam a. lam b. lam x.
     if leqi x b then divf 1.0 (int2float (addi 1 (subi b a)))
     else 0.
   else 0.
+
+let discreteGammaSample = lam shape:Float. lam scale:Float. lam n:Int. lam x:Float. 
+  2.0
+  /-print "here";
+  let bins = snoc (map (lam e. (int2float (divi e n))) (range 0 n 1)) 0.99 in
+  let quantilesX = map (lam b. gammaPpf shape scale b) bins in
+  iter (lam x. print (float2string x)) quantilesX;
+  let ind = uniformDiscreteSample 1 n in
+  divf (addf (get quantilesX ind) (get quantilesX (subi ind 1))) 2.-/
 
 -- Poisson
 let poissonLogPmf = lam lambda:Float. lam x:Int.
@@ -209,6 +226,8 @@ let floatRange = lam lower. lam upper. lam r. lam l.
 utest gammaPdf 1. 2. 1. with 0.303265329856 using _eqf in
 utest exp (gammaLogPdf 2. 3. 1.) with 0.0796145900638 using _eqf in
 utest gammaSample 1. 2. with 1. using floatRange 0. inf in
+utest gammaCdf 1. 2. 1. with 0.393469340287 using _eqf in
+utest gammaPpf 0.5 1. 0.5 with 0.227468211559 using _eqf in
 
 -- Testing Binomial and Bernoulli
 utest binomialPmf 0.7 20 15 with 0.17886305057 using _eqf in
