@@ -106,8 +106,24 @@ let arrCreate : all a. Int -> (Int -> a) -> Arr a
         -- the value is.
         unsafeCoerce arrMake 0 0
 
+-- Creates a float array of length `n`, where the element at index `i` is result of
+-- the application `f i`. Produces an empty array if `n` not greater than zero.
+let arrCreateFloat : Int -> (Int -> Float) -> Arr Float
+  = lam n. lam f.
+      if gti n 0 then
+        let a0 = f 0 in
+        let a = arrMake n a0 in
+        repeati
+          (lam i. let i = addi i 1 in arrSetExn a i (f i))
+          (subi n 1);
+        a
+      else arrMake 0 0.
+
 utest arrLength (arrCreate 0 (lam i. error "impossible")) with 0
 utest arrLength (arrCreate 3 (lam i. i)) with 3
+utest arrLength (arrCreateFloat 0 (lam i. error "impossible")) with 0
+utest arrLength (arrCreateFloat 3 (lam. 0.)) with 3
+
 utest
   let a  = arrCreate 3 (lam i. i) in
   utest arrGetExn a 0 with 0 in
@@ -115,7 +131,13 @@ utest
   utest arrGetExn a 2 with 2 in
   ()
   with ()
-
+utest
+  let a  = arrCreateFloat 3 (lam. 0.) in
+  utest arrGetExn a 0 with 0. in
+  utest arrGetExn a 1 with 0. in
+  utest arrGetExn a 2 with 0. in
+  ()
+  with ()
 
 --==============================================================================
 -- Mutable arrays shareable with external code.
