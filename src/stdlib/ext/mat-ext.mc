@@ -472,6 +472,10 @@ utest
 
 
 external externalMatExp : Int -> Int -> ExtArr Float -> ExtArr Float
+-- Effectful: writes the merged matrix into its last argument.
+external externalMsgMergeLogLike ! :
+  Int -> ExtArr Float -> ExtArr Float -> ExtArr Float -> ExtArr Float ->
+  ExtArr Float -> ExtArr Float -> Float
 
 -- Computes the matrix exponential. Returns a fresh matrix.
 -- .see https://ocaml.xyz/owl/owl/Owl_linalg/Generic/index.html#val-expm
@@ -504,3 +508,69 @@ utest
 -- TODO(oerikss, 2025-02-27): Add additional matrix operations. For each
 -- operation first see if it is part BLAS. If so, implement that in clbas-ext.mc
 -- and then implement it here using that.
+
+
+-- Fuses one phylogenetic-likelihood merge into a single pass. Given two `n x 4`
+-- partial-likelihood matrices and their `4 x 4` transition matrices, writes the
+-- merged matrix into `out` and returns `sum_i w_i * log (0.25 * sum_s out_is)`.
+--
+-- Doing this in one loop rather than as two matrix products, an elementwise
+-- multiply, a matrix-vector product and a separate log reduction avoids five
+-- intermediate `n x 4` matrices and five passes over them; per site the work is
+-- only about 40 flops and one logarithm.
+-- Returns the merged matrix and its weighted log-likelihood. The allocation
+-- sits inside `tmOpaque` for the same reason matMul's does: matMakeUninit is a
+-- pure external, so without it the compiler may re-evaluate the destination at
+-- each use and hand readers a fresh uninitialised array.
+let matMsgMergeLogLike
+  : Mat Float -> Mat Float -> Mat Float -> Mat Float -> ExtArr Float
+    -> (Float, Mat Float)
+  = lam a. lam b. lam pa. lam pb. lam w.
+    tmOpaque (
+      let out = matMakeUninit (externalExtArrKind a.arr) a.m a.n in
+      let ll = externalMsgMergeLogLike a.m a.arr b.arr pa.arr pb.arr w out.arr in
+      (ll, out))
+
+utest
+  let ident = matFromArrExn 4 4
+    (extArrOfSeq extArrKindFloat64
+       [1.,0.,0.,0., 0.,1.,0.,0., 0.,0.,1.,0., 0.,0.,0.,1.]) in
+  -- one site, both children fully ambiguous: merged row is [1,1,1,1], so the
+  -- site contributes log (0.25 * 4) = log 1 = 0
+  let ones = matFromArrExn 1 4 (extArrOfSeq extArrKindFloat64 [1.,1.,1.,1.]) in
+  let w1 = extArrOfSeq extArrKindFloat64 [1.] in
+  match matMsgMergeLogLike ones ones ident ident w1 with (ll, out) in
+  utest ll with 0. in
+  utest matGetExn out 0 0 with 1. in
+  utest matGetExn out 0 3 with 1. in
+
+  -- one site, both children resolved to state A: merged row is [1,0,0,0], so
+  -- the site contributes log (0.25 * 1) = log 0.25
+  let a = matFromArrExn 1 4 (extArrOfSeq extArrKindFloat64 [1.,0.,0.,0.]) in
+  match matMsgMergeLogLike a a ident ident w1 with (ll2, out2) in
+  utest ll2 with log 0.25 in
+  utest matGetExn out2 0 0 with 1. in
+  utest matGetExn out2 0 1 with 0. in
+
+  -- the site weight multiplies that site's contribution
+  let w3 = extArrOfSeq extArrKindFloat64 [3.] in
+  utest (matMsgMergeLogLike a a ident ident w3).0 with mulf 3. (log 0.25) in
+
+  -- two sites accumulate in index order
+  let aa = matFromArrExn 2 4 (extArrOfSeq extArrKindFloat64
+             [1.,0.,0.,0., 1.,0.,0.,0.]) in
+  let w11 = extArrOfSeq extArrKindFloat64 [1.,1.] in
+  utest (matMsgMergeLogLike aa aa ident ident w11).0
+    with addf (log 0.25) (log 0.25) in
+
+  -- a non-identity transition: P sends every state to A, so each child's row
+  -- becomes [4,0,0,0] and the merged row is [16,0,0,0], contributing log 4
+  let toA = matFromArrExn 4 4
+    (extArrOfSeq extArrKindFloat64
+       [1.,0.,0.,0., 1.,0.,0.,0., 1.,0.,0.,0., 1.,0.,0.,0.]) in
+  match matMsgMergeLogLike ones ones toA toA w1 with (ll3, out3) in
+  utest ll3 with log 4. in
+  utest matGetExn out3 0 0 with 16. in
+  utest matGetExn out3 0 1 with 0. in
+  ()
+with ()
